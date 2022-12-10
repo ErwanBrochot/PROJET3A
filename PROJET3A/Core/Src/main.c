@@ -32,7 +32,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define UARTTX_BUFFER_SIZE 64
-#define ADC_BUFFER_SIZE 3
+#define ADC_BUFFER_SIZE 6
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -42,9 +42,9 @@
 
 /* Private variables ---------------------------------------------------------*/
 ADC_HandleTypeDef hadc1;
-ADC_HandleTypeDef hadc2;
 DMA_HandleTypeDef hdma_adc1;
-DMA_HandleTypeDef hdma_adc2;
+
+I2C_HandleTypeDef hi2c1;
 
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim2;
@@ -54,9 +54,10 @@ UART_HandleTypeDef huart2;
 /* USER CODE BEGIN PV */
 uint8_t uartTX_Buffer[UARTTX_BUFFER_SIZE];
 uint32_t adc1Buffer[ADC_BUFFER_SIZE];
-uint32_t adc2Buffer[ADC_BUFFER_SIZE];
+
 int adc1flag = 0;
-int adc2flag = 0;
+int lcdflag=0;
+
 
 /* USER CODE END PV */
 
@@ -68,7 +69,7 @@ static void MX_USART2_UART_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_ADC1_Init(void);
-static void MX_ADC2_Init(void);
+static void MX_I2C1_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -111,10 +112,10 @@ int main(void)
   MX_TIM1_Init();
   MX_TIM2_Init();
   MX_ADC1_Init();
-  MX_ADC2_Init();
+  MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
   sprintf (uartTX_Buffer,"PROJET 3A - Chargeur MPPT");
-  HAL_UART_Transmit(&huart2, uartTX_Buffer, UARTTX_BUFFER_SIZE, HAL_MAX_DELAY);
+  HAL_UART_Transmit(&huart2, uartTX_Buffer, strlen(uartTX_Buffer), HAL_MAX_DELAY);
 
   //Start TIM1&2
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
@@ -122,7 +123,11 @@ int main(void)
 
   //Start ADC1&2 in DMA Mode triggered by TIM2
   HAL_ADC_Start_DMA(&hadc1, adc1Buffer, ADC_BUFFER_SIZE);
-  HAL_ADC_Start_DMA(&hadc2, adc2Buffer, ADC_BUFFER_SIZE);
+
+
+  //LCD Initialisation
+  lcdInit();
+
 
   /* USER CODE END 2 */
 
@@ -130,6 +135,7 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+	  UartprintADCValue();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -213,7 +219,7 @@ static void MX_ADC1_Init(void)
   hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
   hadc1.Init.LowPowerAutoWait = DISABLE;
   hadc1.Init.ContinuousConvMode = DISABLE;
-  hadc1.Init.NbrOfConversion = 3;
+  hadc1.Init.NbrOfConversion = 6;
   hadc1.Init.DiscontinuousConvMode = DISABLE;
   hadc1.Init.ExternalTrigConv = ADC_EXTERNALTRIG_T2_TRGO;
   hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_RISING;
@@ -263,6 +269,33 @@ static void MX_ADC1_Init(void)
   {
     Error_Handler();
   }
+
+  /** Configure Regular Channel
+  */
+  sConfig.Channel = ADC_CHANNEL_7;
+  sConfig.Rank = ADC_REGULAR_RANK_4;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Regular Channel
+  */
+  sConfig.Channel = ADC_CHANNEL_8;
+  sConfig.Rank = ADC_REGULAR_RANK_5;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Regular Channel
+  */
+  sConfig.Channel = ADC_CHANNEL_11;
+  sConfig.Rank = ADC_REGULAR_RANK_6;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
   /* USER CODE BEGIN ADC1_Init 2 */
 
   /* USER CODE END ADC1_Init 2 */
@@ -270,79 +303,50 @@ static void MX_ADC1_Init(void)
 }
 
 /**
-  * @brief ADC2 Initialization Function
+  * @brief I2C1 Initialization Function
   * @param None
   * @retval None
   */
-static void MX_ADC2_Init(void)
+static void MX_I2C1_Init(void)
 {
 
-  /* USER CODE BEGIN ADC2_Init 0 */
+  /* USER CODE BEGIN I2C1_Init 0 */
 
-  /* USER CODE END ADC2_Init 0 */
+  /* USER CODE END I2C1_Init 0 */
 
-  ADC_ChannelConfTypeDef sConfig = {0};
+  /* USER CODE BEGIN I2C1_Init 1 */
 
-  /* USER CODE BEGIN ADC2_Init 1 */
-
-  /* USER CODE END ADC2_Init 1 */
-
-  /** Common config
-  */
-  hadc2.Instance = ADC2;
-  hadc2.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
-  hadc2.Init.Resolution = ADC_RESOLUTION_12B;
-  hadc2.Init.DataAlign = ADC_DATAALIGN_RIGHT;
-  hadc2.Init.GainCompensation = 0;
-  hadc2.Init.ScanConvMode = ADC_SCAN_ENABLE;
-  hadc2.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
-  hadc2.Init.LowPowerAutoWait = DISABLE;
-  hadc2.Init.ContinuousConvMode = DISABLE;
-  hadc2.Init.NbrOfConversion = 3;
-  hadc2.Init.DiscontinuousConvMode = DISABLE;
-  hadc2.Init.ExternalTrigConv = ADC_EXTERNALTRIG_T2_TRGO;
-  hadc2.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_RISING;
-  hadc2.Init.DMAContinuousRequests = ENABLE;
-  hadc2.Init.Overrun = ADC_OVR_DATA_PRESERVED;
-  hadc2.Init.OversamplingMode = DISABLE;
-  if (HAL_ADC_Init(&hadc2) != HAL_OK)
+  /* USER CODE END I2C1_Init 1 */
+  hi2c1.Instance = I2C1;
+  hi2c1.Init.Timing = 0x30A0A7FB;
+  hi2c1.Init.OwnAddress1 = 0;
+  hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c1.Init.OwnAddress2 = 0;
+  hi2c1.Init.OwnAddress2Masks = I2C_OA2_NOMASK;
+  hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c1) != HAL_OK)
   {
     Error_Handler();
   }
 
-  /** Configure Regular Channel
+  /** Configure Analogue filter
   */
-  sConfig.Channel = ADC_CHANNEL_2;
-  sConfig.Rank = ADC_REGULAR_RANK_1;
-  sConfig.SamplingTime = ADC_SAMPLETIME_2CYCLES_5;
-  sConfig.SingleDiff = ADC_SINGLE_ENDED;
-  sConfig.OffsetNumber = ADC_OFFSET_NONE;
-  sConfig.Offset = 0;
-  if (HAL_ADC_ConfigChannel(&hadc2, &sConfig) != HAL_OK)
+  if (HAL_I2CEx_ConfigAnalogFilter(&hi2c1, I2C_ANALOGFILTER_ENABLE) != HAL_OK)
   {
     Error_Handler();
   }
 
-  /** Configure Regular Channel
+  /** Configure Digital filter
   */
-  sConfig.Channel = ADC_CHANNEL_3;
-  sConfig.Rank = ADC_REGULAR_RANK_2;
-  if (HAL_ADC_ConfigChannel(&hadc2, &sConfig) != HAL_OK)
+  if (HAL_I2CEx_ConfigDigitalFilter(&hi2c1, 0) != HAL_OK)
   {
     Error_Handler();
   }
+  /* USER CODE BEGIN I2C1_Init 2 */
 
-  /** Configure Regular Channel
-  */
-  sConfig.Channel = ADC_CHANNEL_4;
-  sConfig.Rank = ADC_REGULAR_RANK_3;
-  if (HAL_ADC_ConfigChannel(&hadc2, &sConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN ADC2_Init 2 */
-
-  /* USER CODE END ADC2_Init 2 */
+  /* USER CODE END I2C1_Init 2 */
 
 }
 
@@ -535,9 +539,6 @@ static void MX_DMA_Init(void)
   /* DMA1_Channel1_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
-  /* DMA1_Channel2_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Channel2_IRQn);
 
 }
 
@@ -559,6 +560,9 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
 
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOB, Rel_Bat1_Pin|Rel_Bat2_Pin, GPIO_PIN_RESET);
+
   /*Configure GPIO pin : B1_Pin */
   GPIO_InitStruct.Pin = B1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
@@ -572,6 +576,17 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
 
+  /*Configure GPIO pins : Rel_Bat1_Pin Rel_Bat2_Pin */
+  GPIO_InitStruct.Pin = Rel_Bat1_Pin|Rel_Bat2_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
+
 }
 
 /* USER CODE BEGIN 4 */
@@ -583,8 +598,23 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
   {
 	  adc1flag=1;
   }
-  else{
-	  adc2flag=1;
+
+}
+
+//GPIO EXTI Callback
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+  if (GPIO_Pin == B1_Pin)
+  {
+	  if (lcdflag==0)
+	  {
+		  lcdflag=1;
+	  }
+	  else
+	  {
+		  lcdflag=0;
+	  }
+	  lcdchangeDisplay();
   }
 }
 
@@ -593,14 +623,63 @@ void UartprintADCValue(void)
 	if (adc1flag==1)
 	{
 		adc1flag=0;
-		sprintf(uartTX_Buffer,"ADC1: CH1:%d | CH2:%d | CH3:%d\r\n",adc1Buffer[0],adc1Buffer[1],adc1Buffer[2]);
-		HAL_UART_Transmit(&huart2, uartTX_Buffer, UARTTX_BUFFER_SIZE, HAL_MAX_DELAY);
+		sprintf(uartTX_Buffer,"Current: Pan:%d | Bat1:%d | Bat2:%d\r\n",adc1Buffer[0],adc1Buffer[1],adc1Buffer[2]);
+		HAL_UART_Transmit(&huart2, uartTX_Buffer, strlen(uartTX_Buffer), HAL_MAX_DELAY);
+		sprintf(uartTX_Buffer,"Voltage: Pan:%d | Bat1:%d | Bat2:%d\r\n",adc1Buffer[3],adc1Buffer[4],adc1Buffer[5]);
+		HAL_UART_Transmit(&huart2, uartTX_Buffer, strlen(uartTX_Buffer), HAL_MAX_DELAY);
 	}
-	else if (adc2flag==1)
+
+}
+
+//LCD Display Functions
+void lcdInit()
+{
+	  HD44780_Init(2);
+	  HD44780_Clear();
+	  HD44780_SetCursor(1,0);
+	  HD44780_PrintStr("SOLAR CHARGER");
+	  HD44780_SetCursor(5, 1);
+	  HD44780_PrintStr("V1.0");
+	  HAL_Delay(2000);
+	  lcdDispVoltage();
+}
+void lcdDispVoltage()
+{
+	//pour test//
+	float test=11.5;
+	char buffer[16];
+	HD44780_Clear();
+	HD44780_SetCursor(0, 0);
+	sprintf(buffer,"Vp=%.1f Vb1=%.1f",test,test);
+	HD44780_PrintStr(buffer);
+	HD44780_SetCursor(4, 1);
+	sprintf(buffer,"Vb2=%.1f",test);
+	HD44780_PrintStr(buffer);
+}
+
+void lcdDispCurrent()
+{
+	//pour test//
+	float test=10.00;
+	char buffer[16];
+	HD44780_Clear();
+	HD44780_SetCursor(0, 0);
+	sprintf(buffer,"Ip=%.1f Ib1=%.1f",test,test);
+	HD44780_PrintStr(buffer);
+	HD44780_SetCursor(4, 1);
+	sprintf(buffer,"Ib2=%.1f",test);
+	HD44780_PrintStr(buffer);
+}
+
+void lcdchangeDisplay()
+{
+	if (lcdflag==0)
 	{
-		adc2flag=0;
-		sprintf(uartTX_Buffer,"ADC2: CH1:%d | CH2:%d | CH3:%d\r\n",adc2Buffer[0],adc2Buffer[1],adc2Buffer[2]);
-		HAL_UART_Transmit(&huart2, uartTX_Buffer, UARTTX_BUFFER_SIZE, HAL_MAX_DELAY);
+		lcdDispVoltage();
+	}
+	else
+	{
+		lcdDispCurrent();
 	}
 }
 
