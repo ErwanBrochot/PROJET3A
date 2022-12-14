@@ -49,13 +49,14 @@ I2C_HandleTypeDef hi2c1;
 
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim2;
+TIM_HandleTypeDef htim3;
 
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 uint8_t uartTX_Buffer[UARTTX_BUFFER_SIZE];
 uint32_t adc1Buffer[ADC_BUFFER_SIZE];
-
+float MeasuredDataBuffer[ADC_BUFFER_SIZE];
 int adc1flag = 0;
 int lcdflag=0;
 
@@ -71,6 +72,7 @@ static void MX_TIM1_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_I2C1_Init(void);
+static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -114,6 +116,7 @@ int main(void)
   MX_TIM2_Init();
   MX_ADC1_Init();
   MX_I2C1_Init();
+  MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
   sprintf (uartTX_Buffer,"PROJET 3A - Chargeur MPPT");
   HAL_UART_Transmit(&huart2, uartTX_Buffer, strlen(uartTX_Buffer), HAL_MAX_DELAY);
@@ -128,6 +131,7 @@ int main(void)
 
   //LCD Initialisation
   lcdInit();
+  HAL_TIM_Base_Start_IT(&htim3);
 
 
   /* USER CODE END 2 */
@@ -137,6 +141,7 @@ int main(void)
   while (1)
   {
 	  UartprintADCValue();
+	  //lcdchangeDisplay();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -377,7 +382,7 @@ static void MX_TIM1_Init(void)
   htim1.Init.Period = 17199;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim1.Init.RepetitionCounter = 0;
-  htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
   if (HAL_TIM_Base_Init(&htim1) != HAL_OK)
   {
     Error_Handler();
@@ -475,6 +480,51 @@ static void MX_TIM2_Init(void)
   /* USER CODE BEGIN TIM2_Init 2 */
 
   /* USER CODE END TIM2_Init 2 */
+
+}
+
+/**
+  * @brief TIM3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM3_Init(void)
+{
+
+  /* USER CODE BEGIN TIM3_Init 0 */
+
+  /* USER CODE END TIM3_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM3_Init 1 */
+
+  /* USER CODE END TIM3_Init 1 */
+  htim3.Instance = TIM3;
+  htim3.Init.Prescaler = 2593;
+  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim3.Init.Period = 65535;
+  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
+  if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim3, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM3_Init 2 */
+
+  /* USER CODE END TIM3_Init 2 */
 
 }
 
@@ -603,6 +653,12 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
 }
 
 //GPIO EXTI Callback
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+	fillMeasuredValueBuffer();
+	lcdchangeDisplay();
+}
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
   if (GPIO_Pin == B1_Pin)
@@ -624,13 +680,74 @@ void UartprintADCValue(void)
 	if (adc1flag==1)
 	{
 		adc1flag=0;
-		sprintf(uartTX_Buffer,"Current: Pan:%d | Bat1:%d | Bat2:%d\r\n",adc1Buffer[0],adc1Buffer[1],adc1Buffer[2]);
+		sprintf(uartTX_Buffer,"Current: Pan:%.1f | Bat1:%.1f | Bat2:%.1f\r\n",MeasuredDataBuffer[0],MeasuredDataBuffer[1],MeasuredDataBuffer[2]);
 		HAL_UART_Transmit(&huart2, uartTX_Buffer, strlen(uartTX_Buffer), HAL_MAX_DELAY);
-		sprintf(uartTX_Buffer,"Voltage: Pan:%d | Bat1:%d | Bat2:%d\r\n",adc1Buffer[3],adc1Buffer[4],adc1Buffer[5]);
+		sprintf(uartTX_Buffer,"Voltage: Pan:%.1f | Bat1:%.1f | Bat2:%.1f\r\n",MeasuredDataBuffer[3],MeasuredDataBuffer[4],MeasuredDataBuffer[5]);
 		HAL_UART_Transmit(&huart2, uartTX_Buffer, strlen(uartTX_Buffer), HAL_MAX_DELAY);
 	}
 
 }
+
+//Conversion for display values
+
+//Batteries
+//Shunt
+float convertForShunt (int decimalValue)
+{
+	float shuntRes=0.005;
+	float adcVoltage= (float)decimalValue*3.3/4096;
+	float current= adcVoltage/shuntRes;
+	return (current);
+}
+
+float convertForBattVoltage(int decimalValue)
+{
+	int r1=1000;
+	int r2=271;
+
+	float adcVoltage= decimalValue*3.3/4096;
+	float voltage=adcVoltage*(r1+r2)/r2;
+	return voltage;
+}
+
+//Pannel
+
+float convertForPannelVoltage(int decimalValue)
+{
+	int r1=1000;
+	int r2=69.8;
+
+	float adcVoltage= decimalValue*3.3/4096;
+	float voltage= adcVoltage*(r1+r2)/r2;
+	return voltage;
+}
+
+float convertForPannelCurrent(int decimalValue)
+{
+	//Max current value measured: 30.2A but pannel's current is 5A max so it's ok.
+	float adcVoltage=decimalValue*3.3/4096;
+	float current= (adcVoltage-2.5)*(170/4.5);
+	return current;
+}
+
+void fillMeasuredValueBuffer()
+{
+	float pannelCurrent= convertForPannelCurrent(adc1Buffer[0]);
+	float bat1Current= convertForShunt(adc1Buffer[1]);
+	float bat2Current= convertForShunt(adc1Buffer[2]);
+	float pannelVoltage= convertForPannelVoltage(adc1Buffer[3]);
+	float bat1Voltage= convertForBattVoltage(adc1Buffer[4]);
+	float bat2Voltage= convertForBattVoltage(adc1Buffer[5]);
+	MeasuredDataBuffer[0]= pannelCurrent;
+	MeasuredDataBuffer[1]= bat1Current;
+	MeasuredDataBuffer[2]= bat2Current;
+	MeasuredDataBuffer[3]= pannelVoltage;
+	MeasuredDataBuffer[4]=bat1Voltage;
+	MeasuredDataBuffer[5]=bat2Voltage;
+}
+
+
+//Battery
 
 //LCD Display Functions
 void lcdInit()
@@ -646,29 +763,27 @@ void lcdInit()
 }
 void lcdDispVoltage()
 {
-	//pour test//
-	float test=11.5;
+
 	char buffer[16];
 	HD44780_Clear();
 	HD44780_SetCursor(0, 0);
-	sprintf(buffer,"Vp=%.1f Vb1=%.1f",test,test);
+	sprintf(buffer,"Vp=%.1f Vb1=%.1f",MeasuredDataBuffer[3],MeasuredDataBuffer[4]);
 	HD44780_PrintStr(buffer);
 	HD44780_SetCursor(4, 1);
-	sprintf(buffer,"Vb2=%.1f",test);
+	sprintf(buffer,"Vb2=%.1f",MeasuredDataBuffer[5]);
 	HD44780_PrintStr(buffer);
 }
 
 void lcdDispCurrent()
 {
 	//pour test//
-	float test=10.00;
 	char buffer[16];
 	HD44780_Clear();
 	HD44780_SetCursor(0, 0);
-	sprintf(buffer,"Ip=%.1f Ib1=%.1f",test,test);
+	sprintf(buffer,"Ip=%.1f Ib1=%.1f",MeasuredDataBuffer[0],MeasuredDataBuffer[1]);
 	HD44780_PrintStr(buffer);
 	HD44780_SetCursor(4, 1);
-	sprintf(buffer,"Ib2=%.1f",test);
+	sprintf(buffer,"Ib2=%.1f",MeasuredDataBuffer[2]);
 	HD44780_PrintStr(buffer);
 }
 
